@@ -1,0 +1,167 @@
+# .github/workflows/release.yml
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送 v1.0.0, v1.1.0 等标签时触发
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.19'
+        
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+    - name: Build binaries
+      run: |
+        # 创建dist目录
+        mkdir -p dist
+        
+        # 构建 Linux AMD64
+        echo "Building for Linux AMD64..."
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/awd-filechecker-linux-amd64 awd-filechecker.go
+        
+        # 构建 Linux ARM64
+        echo "Building for Linux ARM64..."
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/awd-filechecker-linux-arm64 awd-filechecker.go
+        
+        # 验证构建的文件
+        ls -la dist/
+        file dist/*
+        
+    - name: Create release packages
+      run: |
+        cd dist
+        
+        # 创建 Linux AMD64 发布包
+        mkdir -p amd64-package
+        cp awd-filechecker-linux-amd64 amd64-package/awd-filechecker
+        cp ../notifier.py amd64-package/
+        cp ../requirements.txt amd64-package/
+        cp ../README.md amd64-package/
+        cp ../LICENSE amd64-package/
+
+        tar -czf 0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz -C amd64-package .
+        
+        # 创建 Linux ARM64 发布包
+        mkdir -p arm64-package
+        cp awd-filechecker-linux-arm64 arm64-package/awd-filechecker
+        cp ../notifier.py arm64-package/
+        cp ../requirements.txt arm64-package/
+        cp ../README.md arm64-package/
+        cp ../LICENSE arm64-package/
+        cp amd64-package/INSTALL.txt arm64-package/
+        
+        tar -czf 0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz -C arm64-package .
+        
+        # 显示最终文件
+        ls -la *.tar.gz
+        
+    - name: Generate checksums
+      run: |
+        cd dist
+        sha256sum *.tar.gz > checksums.txt
+        cat checksums.txt
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        release_name: 0RAYS EDR File Checker ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## 0RAYS EDR File Checker ${{ steps.get_version.outputs.VERSION }}
+          
+          ### 下载说明
+          
+          **Linux AMD64** (适用于大多数Linux服务器):
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.VERSION }}/0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz
+          tar -xzf 0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz
+          chmod +x awd-filechecker
+          ```
+          
+          **Linux ARM64** (适用于ARM架构服务器，如树莓派):
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.VERSION }}/0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz
+          tar -xzf 0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz
+          chmod +x awd-filechecker
+          ```
+          
+          ### 🚀 快速开始
+          
+          1. **基本监控:**
+             ```bash
+             ./awd-filechecker -m /var/www/html -b /tmp/edr
+             ```
+          
+          2. **启用桌面通知:**
+             ```bash
+             # 终端1: 启动通知器
+             pip3 install -r requirements.txt
+             python3 notifier.py
+             
+             # 终端2: 启动监控
+             ./awd-filechecker -m /var/www/html -b /tmp/edr -a 127.0.0.1:8080
+             ```
+          
+          3. **Web服务器防护:**
+             ```bash
+             ./awd-filechecker -m /var/www/html -b /opt/edr-backup -e .php,.jsp,.asp
+             ```
+          
+          ### 📋 系统要求
+          - Linux 系统 (不支持 Windows/macOS)
+          - Go 1.19+ (如需编译)
+          - Python 3.7+ (通知器可选)
+          
+          
+          ---
+          
+          **完整更新日志请查看:** [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.VERSION }}/CHANGELOG.md)
+        draft: false
+        prerelease: false
+        
+    - name: Upload AMD64 Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dist/0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz
+        asset_name: 0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz
+        asset_content_type: application/gzip
+        
+    - name: Upload ARM64 Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dist/0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz
+        asset_name: 0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz
+        asset_content_type: application/gzip
+        
+    - name: Upload Checksums
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dist/checksums.txt
+        asset_name: checksums.txt
+        asset_content_type: text/plain
