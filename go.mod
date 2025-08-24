@@ -1,3 +1,3 @@
-module awd-filechecker.go
+module github.com/christarcher/0RAYS-AWD-Filechecker
 
-go 1.22.4
+go 1.19
