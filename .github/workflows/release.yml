@@ -57,5 +57,5 @@ jobs:
           dist/0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz
           dist/0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz
           dist/checksums.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
