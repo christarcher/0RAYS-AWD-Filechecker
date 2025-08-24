@@ -1,0 +1,61 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Get version
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+    - name: Build
+      run: |
+        mkdir -p dist
+        go mod tidy || true
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/awd-filechecker-linux-amd64 .
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/awd-filechecker-linux-arm64 .
+        
+    - name: Package
+      run: |
+        cd dist
+        
+        mkdir -p amd64-package
+        cp awd-filechecker-linux-amd64 amd64-package/awd-filechecker
+        [ -f ../notifier.py ] && cp ../notifier.py amd64-package/ || true
+        [ -f ../requirements.txt ] && cp ../requirements.txt amd64-package/ || true
+        [ -f ../README.md ] && cp ../README.md amd64-package/ || true
+        tar -czf 0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz -C amd64-package .
+        
+        mkdir -p arm64-package
+        cp awd-filechecker-linux-arm64 arm64-package/awd-filechecker
+        [ -f ../notifier.py ] && cp ../notifier.py arm64-package/ || true
+        [ -f ../requirements.txt ] && cp ../requirements.txt arm64-package/ || true
+        [ -f ../README.md ] && cp ../README.md arm64-package/ || true
+        tar -czf 0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz -C arm64-package .
+        
+        sha256sum *.tar.gz > checksums.txt
+        
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz
+          dist/0rays-edr-filechecker-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz
+          dist/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
